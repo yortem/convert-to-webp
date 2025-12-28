@@ -1,0 +1,117 @@
+﻿<Window x:Class="ConvertToWebP.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:ConvertToWebP"
+        mc:Ignorable="d"
+        Title="Convert to WebP" Height="600" Width="950"
+        Icon="favicon.ico"
+        AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver"
+        Closing="Window_Closing" Loaded="Window_Loaded">
+    
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="LabelStyle">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="15">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="7*"/> <!-- 70% List -->
+            <ColumnDefinition Width="3*"/> <!-- 30% Settings -->
+        </Grid.ColumnDefinitions>
+
+        <!-- Left Column: List & Actions -->
+        <Grid Grid.Column="0" Margin="0,0,15,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <TextBlock Text="Images to Convert" FontWeight="Bold" FontSize="18" Margin="0,0,0,5"/>
+            <TextBlock Text="(Drag &amp; Drop Files Here)" FontSize="12" Foreground="Gray" VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,0,5"/>
+
+            <ListView x:Name="LogListView" Grid.Row="1" BorderThickness="1" BorderBrush="#DDDDDD" AllowDrop="True" Drop="Window_Drop" DragOver="Window_DragOver" KeyDown="LogListView_KeyDown" SelectionMode="Extended">
+                <ListView.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Remove Selected" Click="RemoveMenuItem_Click"/>
+                        <Separator/>
+                        <MenuItem Header="Clear List" Click="ClearListButton_Click"/>
+                    </ContextMenu>
+                </ListView.ContextMenu>
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Filename" Width="250" DisplayMemberBinding="{Binding Filename}"/>
+                        <GridViewColumn Header="Original" Width="80" DisplayMemberBinding="{Binding OriginalSize}"/>
+                        <GridViewColumn Header="New" Width="80" DisplayMemberBinding="{Binding NewSize}"/>
+                        <GridViewColumn Header="Status" Width="150" DisplayMemberBinding="{Binding Status}"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <Grid Grid.Row="2" Margin="0,15,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                
+                <Button x:Name="OpenFolderButton" Click="OpenFolderButton_Click" Content="📂 Open Output Folder" Padding="10,5" Margin="0,0,10,0"/>
+                <Button x:Name="ClearListButton" Grid.Column="1" Click="ClearListButton_Click" Content="🗑️ Clear List" Padding="10,5" Margin="0,0,10,0"/>
+                
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <TextBlock Text="Savings:" FontWeight="Bold" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TotalSavingsText" Text="0 MB" Margin="0,0,15,0" VerticalAlignment="Center"/>
+                    <Button x:Name="CompressButton" Content="Compress Images" Click="CompressButton_Click" Background="#007ACC" Foreground="White" FontWeight="Bold" Padding="15,5"/>
+                </StackPanel>
+            </Grid>
+        </Grid>
+
+        <!-- Right Column: Settings -->
+        <Border Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="4" Padding="15" Background="#FAFAFA">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Settings" FontSize="16" FontWeight="Bold" Margin="0,0,0,15"/>
+
+                    <!-- Quality -->
+                    <TextBlock Text="Quality (1-100)" Style="{StaticResource LabelStyle}" Margin="0,0,0,5"/>
+                    <Slider x:Name="QualitySlider" Minimum="1" Maximum="100" Value="75" TickFrequency="5" IsSnapToTickEnabled="True" AutoToolTipPlacement="TopLeft" Margin="0,0,0,5"/>
+                    <TextBlock Text="{Binding ElementName=QualitySlider, Path=Value}" HorizontalAlignment="Right" FontWeight="Bold" Margin="0,-20,0,10"/>
+
+                    <Separator Margin="0,10,0,10"/>
+
+                    <!-- Resize -->
+                    <CheckBox x:Name="ResizeCheckBox" Content="Limit Dimensions" FontWeight="SemiBold" Margin="0,0,0,5" Click="ResizeCheckBox_Click"/>
+                    <StackPanel Orientation="Horizontal" Margin="20,0,0,10" IsEnabled="{Binding ElementName=ResizeCheckBox, Path=IsChecked}">
+                        <TextBlock Text="Max px:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="MaxWidthTextBox" Width="60" Text="1600" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Separator Margin="0,5,0,10"/>
+
+                    <!-- Naming -->
+                    <CheckBox x:Name="PrefixCheckBox" Content="Add 'compressed_' prefix" Margin="0,0,0,5"/>
+                    <CheckBox x:Name="StripMetadataCheckBox" Content="Strip Metadata (SEO)" IsChecked="True" ToolTip="Removes EXIF/IPTC data to reduce file size" Margin="0,0,0,10"/>
+
+                    <Separator Margin="0,5,0,10"/>
+
+                    <!-- Output Folder -->
+                    <TextBlock Text="Output Folder" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                    <RadioButton x:Name="RadioSameFolder" GroupName="Output" Content="Same as Source (in 'WebP_Export')" IsChecked="True" Margin="0,0,0,8" Checked="RadioSameFolder_Checked"/>
+                    <RadioButton x:Name="RadioCustomFolder" GroupName="Output" Content="Custom Folder" Margin="0,0,0,8" Checked="RadioCustomFolder_Checked"/>
+                    
+                    <StackPanel Margin="20,0,0,0" IsEnabled="{Binding ElementName=RadioCustomFolder, Path=IsChecked}">
+                        <TextBox x:Name="CustomPathTextBox" Height="25" Margin="0,0,0,5" VerticalContentAlignment="Center" Background="White"/>
+                        <Button x:Name="BrowseButton" Content="Browse..." Height="25" Click="BrowseButton_Click"/>
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
+</Window>

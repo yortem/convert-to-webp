@@ -1,0 +1,17 @@
+# Exclude build artifacts
+/bin/
+/obj/
+.vs/
+
+# Exclude generated output
+WebP_Export/
+
+# Exclude binary assets to save context
+*.webp
+*.jpg
+*.jpeg
+*.png
+*.dll
+*.exe
+*.pdb
+*.cache
