@@ -2,6 +2,7 @@
 /bin/
 /obj/
 .vs/
+Publish/
 
 # Exclude generated output
 WebP_Export/
