@@ -83,10 +83,17 @@
                     <Slider x:Name="QualitySlider" Minimum="1" Maximum="100" Value="75" TickFrequency="5" IsSnapToTickEnabled="True" AutoToolTipPlacement="TopLeft" Margin="0,0,0,5"/>
                     <TextBlock Text="{Binding ElementName=QualitySlider, Path=Value}" HorizontalAlignment="Right" FontWeight="Bold" Margin="0,-20,0,10"/>
 
+                    <TextBlock Text="Compression Effort" Style="{StaticResource LabelStyle}" Margin="0,0,0,5"/>
+                    <ComboBox x:Name="CompressionEffortComboBox" SelectedIndex="1" Margin="0,0,0,5">
+                        <ComboBoxItem Content="Fast (0-2)" Tag="2"/>
+                        <ComboBoxItem Content="Balanced (4)" Tag="4"/>
+                        <ComboBoxItem Content="Best (6)" Tag="6"/>
+                    </ComboBox>
+
                     <Separator Margin="0,10,0,10"/>
 
                     <!-- Resize -->
-                    <CheckBox x:Name="ResizeCheckBox" Content="Limit Dimensions" FontWeight="SemiBold" Margin="0,0,0,5" Click="ResizeCheckBox_Click"/>
+                    <CheckBox x:Name="ResizeCheckBox" Content="Limit Dimensions" FontWeight="SemiBold" Margin="0,0,0,5"/>
                     <StackPanel Orientation="Horizontal" Margin="20,0,0,10" IsEnabled="{Binding ElementName=ResizeCheckBox, Path=IsChecked}">
                         <TextBlock Text="Max px:" VerticalAlignment="Center" Margin="0,0,5,0"/>
                         <TextBox x:Name="MaxWidthTextBox" Width="60" Text="1600" VerticalAlignment="Center"/>
@@ -102,8 +109,8 @@
 
                     <!-- Output Folder -->
                     <TextBlock Text="Output Folder" FontWeight="SemiBold" Margin="0,0,0,10"/>
-                    <RadioButton x:Name="RadioSameFolder" GroupName="Output" Content="Same as Source (in 'WebP_Export')" IsChecked="True" Margin="0,0,0,8" Checked="RadioSameFolder_Checked"/>
-                    <RadioButton x:Name="RadioCustomFolder" GroupName="Output" Content="Custom Folder" Margin="0,0,0,8" Checked="RadioCustomFolder_Checked"/>
+                    <RadioButton x:Name="RadioSameFolder" GroupName="Output" Content="Same as Source (in 'WebP_Export')" IsChecked="True" Margin="0,0,0,8"/>
+                    <RadioButton x:Name="RadioCustomFolder" GroupName="Output" Content="Custom Folder" Margin="0,0,0,8"/>
                     
                     <StackPanel Margin="20,0,0,0" IsEnabled="{Binding ElementName=RadioCustomFolder, Path=IsChecked}">
                         <TextBox x:Name="CustomPathTextBox" Height="25" Margin="0,0,0,5" VerticalContentAlignment="Center" Background="White"/>

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,7 +15,11 @@ namespace ConvertToWebP
 {
     public partial class MainWindow : System.Windows.Window
     {
-        private AppSettings _settings;
+        private static readonly string[] ImageExtensions = { ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp" };
+
+        private AppSettings _settings = new AppSettings();
+        private CancellationTokenSource? _cts;
+        private readonly HashSet<string> _queuedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         public ObservableCollection<LogEntry> LogEntries { get; set; } = new ObservableCollection<LogEntry>();
 
         public MainWindow()
@@ -32,6 +37,9 @@ namespace ConvertToWebP
             PrefixCheckBox.IsChecked = _settings.AddPrefix;
             StripMetadataCheckBox.IsChecked = _settings.StripMetadata;
 
+            int index = CompressionEffortComboBox.Items.IndexOf(CompressionEffortComboBox.Items.Cast<object>().FirstOrDefault(i => (int)((ComboBoxItem)i).Tag == _settings.CompressionMethod));
+            if (index >= 0) CompressionEffortComboBox.SelectedIndex = index;
+
             if (_settings.UseCustomOutput)
             {
                 RadioCustomFolder.IsChecked = true;
@@ -41,12 +49,12 @@ namespace ConvertToWebP
             {
                 RadioSameFolder.IsChecked = true;
             }
-
-            UpdateUIState();
         }
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            _cts?.Cancel();
+
             _settings.Quality = (int)QualitySlider.Value;
             _settings.ResizeEnabled = ResizeCheckBox.IsChecked == true;
             if (int.TryParse(MaxWidthTextBox.Text, out int maxWidth))
@@ -57,16 +65,11 @@ namespace ConvertToWebP
             _settings.StripMetadata = StripMetadataCheckBox.IsChecked == true;
             _settings.UseCustomOutput = RadioCustomFolder.IsChecked == true;
             _settings.CustomOutputPath = CustomPathTextBox.Text;
+            if (CompressionEffortComboBox.SelectedItem is ComboBoxItem selected)
+            {
+                _settings.CompressionMethod = (int)selected.Tag;
+            }
             _settings.Save();
-        }
-
-        private void ResizeCheckBox_Click(object sender, RoutedEventArgs e) => UpdateUIState();
-        private void RadioSameFolder_Checked(object sender, RoutedEventArgs e) => UpdateUIState();
-        private void RadioCustomFolder_Checked(object sender, RoutedEventArgs e) => UpdateUIState();
-
-        private void UpdateUIState()
-        {
-            // Logic handled by bindings mostly, but explicit updates here if needed
         }
 
         private void Window_DragOver(object sender, System.Windows.DragEventArgs e)
@@ -97,7 +100,7 @@ namespace ConvertToWebP
                 {
                     try
                     {
-                        var files = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories).Where(IsImageFile);
+                        var files = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories).Where(IsImageFile);
                         foreach (var file in files) AddToLog(file);
                     }
                     catch { }
@@ -107,12 +110,13 @@ namespace ConvertToWebP
 
         private void AddToLog(string filePath)
         {
-            if (LogEntries.Any(x => x.FullPath == filePath)) return;
+            if (!_queuedPaths.Add(filePath)) return;
             var fi = new FileInfo(filePath);
             LogEntries.Add(new LogEntry
             {
                 FullPath = filePath,
                 Filename = Path.GetFileName(filePath),
+                OriginalBytes = fi.Length,
                 OriginalSize = FormatBytes(fi.Length),
                 NewSize = "-",
                 Status = "Pending"
@@ -142,11 +146,10 @@ namespace ConvertToWebP
                 }
                 else if (LogEntries.Count > 0)
                 {
-                    // Try to open the folder of the first item, or its WebP_Export subfolder
                     var firstItem = LogEntries.FirstOrDefault(x => x.Status.Contains("Saved") || x.Status == "Pending");
                     if (firstItem != null)
                     {
-                        string dir = Path.GetDirectoryName(firstItem.FullPath);
+                        string dir = Path.GetDirectoryName(firstItem.FullPath) ?? "";
                         if (RadioSameFolder.IsChecked == true)
                         {
                             string exportDir = Path.Combine(dir, "WebP_Export");
@@ -191,6 +194,7 @@ namespace ConvertToWebP
         private void ClearListButton_Click(object sender, RoutedEventArgs e)
         {
             LogEntries.Clear();
+            _queuedPaths.Clear();
             TotalSavingsText.Text = "0 MB";
         }
 
@@ -199,6 +203,7 @@ namespace ConvertToWebP
             var selectedItems = LogListView.SelectedItems.Cast<LogEntry>().ToList();
             foreach (var item in selectedItems)
             {
+                _queuedPaths.Remove(item.FullPath);
                 LogEntries.Remove(item);
             }
         }
@@ -212,7 +217,6 @@ namespace ConvertToWebP
                 return;
             }
 
-            // Validate Custom Path
             if (RadioCustomFolder.IsChecked == true)
             {
                 if (string.IsNullOrWhiteSpace(CustomPathTextBox.Text) || !Directory.Exists(CustomPathTextBox.Text))
@@ -222,8 +226,6 @@ namespace ConvertToWebP
                 }
             }
 
-            CompressButton.IsEnabled = false;
-
             int quality = (int)QualitySlider.Value;
             bool resize = ResizeCheckBox.IsChecked == true;
             int maxWidth = 1600;
@@ -232,27 +234,47 @@ namespace ConvertToWebP
             bool stripMetadata = StripMetadataCheckBox.IsChecked == true;
             bool useCustom = RadioCustomFolder.IsChecked == true;
             string customPath = CustomPathTextBox.Text;
+            int compressionMethod = CompressionEffortComboBox.SelectedItem is ComboBoxItem item ? (int)item.Tag : 4;
 
-            await Task.Run(() =>
+            _cts = new CancellationTokenSource();
+            var token = _cts.Token;
+            SetBusy(true);
+
+            try
             {
-                foreach (var item in pendingItems)
+                await Task.Run(() =>
                 {
-                    ConvertFile(item, quality, resize, maxWidth, prefix, stripMetadata, useCustom, customPath);
-                }
-            });
+                    Parallel.ForEach(pendingItems,
+                        new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) },
+                        item => ConvertFile(item, quality, resize, maxWidth, prefix, stripMetadata, useCustom, customPath, compressionMethod, token));
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // user closed the window; nothing to report
+            }
+            finally
+            {
+                _cts.Dispose();
+                _cts = null;
+                SetBusy(false);
+            }
 
-            CompressButton.IsEnabled = true;
-            TotalSavingsText.Text = "Batch Completed";
+            TotalSavingsText.Text = FormatBytes(LogEntries.Where(x => x.NewBytes > 0).Sum(x => x.OriginalBytes - x.NewBytes));
         }
 
-        private bool IsImageFile(string path)
+        private bool IsImageFile(string path) => ImageExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
+
+        private void SetBusy(bool busy)
         {
-            var ext = Path.GetExtension(path).ToLower();
-            return ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".bmp" || ext == ".tiff" || ext == ".tif" || ext == ".webp";
+            CompressButton.IsEnabled = !busy;
+            ClearListButton.IsEnabled = !busy;
+            OpenFolderButton.IsEnabled = !busy;
         }
 
-        private void ConvertFile(LogEntry item, int quality, bool resize, int maxWidth, bool prefix, bool stripMetadata, bool useCustom, string customPath)
+        private void ConvertFile(LogEntry item, int quality, bool resize, int maxWidth, bool prefix, bool stripMetadata, bool useCustom, string customPath, int compressionMethod, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
             try
             {
                 System.Windows.Application.Current.Dispatcher.Invoke(() => item.Status = "Processing...");
@@ -268,11 +290,11 @@ namespace ConvertToWebP
                 }
                 else
                 {
-                    string folder = Path.GetDirectoryName(filePath);
+                    string folder = Path.GetDirectoryName(filePath) ?? Path.GetTempPath();
                     exportFolder = Path.Combine(folder, "WebP_Export");
                 }
 
-                if (!Directory.Exists(exportFolder)) Directory.CreateDirectory(exportFolder);
+                Directory.CreateDirectory(exportFolder);
 
                 string fileNameNoExt = Path.GetFileNameWithoutExtension(filePath);
                 string newFileName = prefix ? $"compressed_{fileNameNoExt}.webp" : $"{fileNameNoExt}.webp";
@@ -292,8 +314,9 @@ namespace ConvertToWebP
 
                     image.Format = MagickFormat.WebP;
                     image.Quality = (uint)quality;
-                    image.Settings.SetDefine(MagickFormat.WebP, "method", "6");
+                    image.Settings.SetDefine(MagickFormat.WebP, "method", compressionMethod.ToString());
 
+                    token.ThrowIfCancellationRequested();
                     image.Write(outputPath);
                 }
 
@@ -302,12 +325,14 @@ namespace ConvertToWebP
 
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
+                    item.NewBytes = newSize;
                     item.NewSize = FormatBytes(newSize);
                     item.Status = $"Saved {((originalSize - newSize) / (double)originalSize):P0}";
                 });
             }
             catch (Exception ex)
             {
+                if (token.IsCancellationRequested) return;
                 System.Windows.Application.Current.Dispatcher.Invoke(() =>
                 {
                     item.Status = "Error: " + ex.Message;
@@ -325,25 +350,27 @@ namespace ConvertToWebP
 
     public class LogEntry : System.ComponentModel.INotifyPropertyChanged
     {
-        public string FullPath { get; set; }
-        public string Filename { get; set; }
-        public string OriginalSize { get; set; }
+        public string FullPath { get; set; } = "";
+        public string Filename { get; set; } = "";
+        public string OriginalSize { get; set; } = "";
+        public long OriginalBytes { get; set; }
+        public long NewBytes { get; set; }
 
-        private string _newSize;
+        private string _newSize = "-";
         public string NewSize
         {
             get => _newSize;
             set { _newSize = value; OnPropertyChanged("NewSize"); }
         }
 
-        private string _status;
+        private string _status = "Pending";
         public string Status
         {
             get => _status;
             set { _status = value; OnPropertyChanged("Status"); }
         }
 
-        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged(string name) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
     }
 }
