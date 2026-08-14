@@ -7,10 +7,11 @@ A high-efficiency Windows desktop application for batch converting images to Web
 ## Features
 
 *   **Drag & Drop**: Easily add files or folders by dragging them into the application.
-*   **Batch Processing**: Convert hundreds of images at once.
+*   **Batch Processing**: Convert hundreds of images at once, in parallel across your CPU cores.
 *   **Manual Trigger**: Queue files and compress them when ready.
 *   **Advanced Settings**:
     *   **Quality Control**: Adjust WebP quality (1-100).
+    *   **Compression Effort**: Fast / Balanced / Best trade-off between speed and file size.
     *   **Resize**: Limit max width/height while maintaining aspect ratio.
     *   **Prefix**: Option to add `compressed_` prefix to filenames.
 *   **SEO Tools**:
@@ -20,12 +21,16 @@ A high-efficiency Windows desktop application for batch converting images to Web
     *   Or choose a custom output directory.
 *   **List Management**: Remove individual items or clear the entire list.
 
+## Downloads
+
+Ready-to-run Windows builds (single-file `.exe`, no .NET installation required) are published on the [Releases](https://github.com/yortem/convert-to-webp/releases) page. Just download the ZIP or EXE and run it.
+
 ## Getting Started
 
 ### Prerequisites
 
-*   [.NET 6.0 SDK](https://dotnet.microsoft.com/download/dotnet/6.0) or later.
-*   Windows OS.
+*   [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) or later.
+*   Windows 10/11.
 
 ### Installation
 
@@ -39,7 +44,7 @@ A high-efficiency Windows desktop application for batch converting images to Web
     ```
 3.  Build and Run:
     ```bash
-    dotnet run --project ConvertToWebP/ConvertToWebP.csproj
+    dotnet run --project ConvertToWebP.csproj
     ```
 
 ## Usage
@@ -55,3 +60,7 @@ A high-efficiency Windows desktop application for batch converting images to Web
 *   **C# / WPF** (Windows Presentation Foundation)
 *   **Magick.NET** (ImageMagick wrapper for .NET)
 *   **Newtonsoft.Json** (Settings persistence)
+
+## Configuration
+
+Settings are saved automatically to `%AppData%\ConvertToWebP\settings.json`.
